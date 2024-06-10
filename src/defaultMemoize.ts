@@ -18,45 +18,54 @@ interface Cache {
   clear(): void
 }
 
-function createSingletonCache(equals: EqualityFn): Cache {
-  let entry: Entry | undefined
-  return {
-    get(key: unknown) {
-      if (entry && equals(entry.key, key)) {
-        return entry.value
-      }
+class SingletonCache implements Cache {
+  private entry: Entry | undefined
 
-      return NOT_FOUND
-    },
+  constructor(private equals: EqualityFn) {
+  }
 
-    put(key: unknown, value: unknown) {
-      entry = { key, value }
-    },
-
-    getEntries() {
-      return entry ? [entry] : []
-    },
-
-    clear() {
-      entry = undefined
+  get(key: unknown) {
+    if (this.entry && this.equals(this.entry.key, key)) {
+      return this.entry.value
     }
+
+    return NOT_FOUND
+  }
+
+  put(key: unknown, value: unknown) {
+    this.entry = { key, value }
+  }
+
+  getEntries() {
+    return this.entry ? [this.entry] : []
+  }
+
+  clear() {
+    this.entry = undefined
   }
 }
 
-function createLruCache(maxSize: number, equals: EqualityFn): Cache {
-  let entries: Entry[] = []
+function createSingletonCache(equals: EqualityFn): Cache {
+  return new SingletonCache(equals)
+}
 
-  function get(key: unknown) {
-    const cacheIndex = entries.findIndex(entry => equals(key, entry.key))
+class LruCache implements Cache {
+  private entries: Entry[] = []
+
+  constructor(private maxSize: number, private equals: EqualityFn) {
+  }
+
+  get(key: unknown) {
+    const cacheIndex = this.entries.findIndex(entry => this.equals(key, entry.key))
 
     // We found a cached entry
     if (cacheIndex > -1) {
-      const entry = entries[cacheIndex]
+      const entry = this.entries[cacheIndex]
 
       // Cached entry not at top of cache, move it to the top
       if (cacheIndex > 0) {
-        entries.splice(cacheIndex, 1)
-        entries.unshift(entry)
+        this.entries.splice(cacheIndex, 1)
+        this.entries.unshift(entry)
       }
 
       return entry.value
@@ -66,25 +75,27 @@ function createLruCache(maxSize: number, equals: EqualityFn): Cache {
     return NOT_FOUND
   }
 
-  function put(key: unknown, value: unknown) {
-    if (get(key) === NOT_FOUND) {
+  put(key: unknown, value: unknown) {
+    if (this.get(key) === NOT_FOUND) {
       // TODO Is unshift slow?
-      entries.unshift({ key, value })
-      if (entries.length > maxSize) {
-        entries.pop()
+      this.entries.unshift({ key, value })
+      if (this.entries.length > this.maxSize) {
+        this.entries.pop()
       }
     }
   }
 
-  function getEntries() {
-    return entries
+  getEntries() {
+    return this.entries
   }
 
-  function clear() {
-    entries = []
+  clear() {
+    this.entries = []
   }
+}
 
-  return { get, put, getEntries, clear }
+function createLruCache(maxSize: number, equals: EqualityFn): Cache {
+  return new LruCache(maxSize, equals)
 }
 
 export const defaultEqualityCheck: EqualityFn = (a, b): boolean => {
